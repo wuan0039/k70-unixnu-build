@@ -1,11 +1,5 @@
 #!/usr/bin/env python3
-"""Patch the checked-out vermeer device repo for the UFS-less link test.
-
-- turn NativeUfs off (it references the verified-root archive and the
-  original IOStorageFamily vtable, both of which need a live GDB audit)
-- add the LinkStubs archive to the kernel link
-- install the stub source and its builder
-"""
+"""Patch the checked-out vermeer device repo for the UFS-less link test."""
 import shutil
 import sys
 from pathlib import Path
@@ -28,7 +22,5 @@ if not any("build-link-stubs.py" in line for line in lines):
     lines.insert(index + 1, '  "build-link-stubs.py",')
     board.write_text("\n".join(lines) + "\n")
 
-(dev / "kits" / "vermeer").mkdir(parents=True, exist_ok=True)
-shutil.copy(Path(__file__).with_name("LinkStubs.c"), dev / "kits" / "vermeer" / "LinkStubs.c")
 shutil.copy(Path(__file__).with_name("build-link-stubs.py"), dev / "scripts" / "build-link-stubs.py")
-print(f"patched {dev}: UFS off, LinkStubs added")
+print(f"patched {dev}: UFS off, LinkStubs builder installed")
