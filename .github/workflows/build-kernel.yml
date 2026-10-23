@@ -61,6 +61,15 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Check out the CI helper files
+        uses: actions/checkout@v4
+        with:
+          path: ci
+          fetch-depth: 1
+
+      - name: Patch the device for the UFS-less link test
+        run: python3 ci/patch/patch_device.py device
+
       - name: Install host tools
         run: |
           brew install llvm lld mtools dtc
