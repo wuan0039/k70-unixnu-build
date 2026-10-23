@@ -1,0 +1,110 @@
+name: build vermeer kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: Device defconfig
+        required: true
+        default: vermeer_defconfig
+      device_repository:
+        description: Device repository (owner/name)
+        required: true
+        default: yyx2025/UniXNU-vermeer
+      device_ref:
+        description: Device repository ref
+        required: true
+        default: main
+      ipsw_url:
+        description: IPSW URL (empty uses board.toml)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+  DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  kernel:
+    runs-on: macos-26
+    timeout-minutes: 360
+    env:
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+      DEFCONFIG: ${{ inputs.defconfig }}
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: unixnu
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Check out the device repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.device_repository }}
+          ref: ${{ inputs.device_ref }}
+          path: device
+          fetch-depth: 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install host tools
+        run: |
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
+
+      - name: Report the runner toolchain
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+          python3 --version
+          df -h "$GITHUB_WORKSPACE"
+
+      - name: Select the device
+        working-directory: unixnu
+        run: ./unixnu defconfig "$DEFCONFIG"
+
+      - name: Fetch the IPSW members
+        working-directory: unixnu
+        env:
+          UNIXNU_IPSW: ${{ inputs.ipsw_url }}
+        run: ./unixnu ipsw fetch || true
+
+      - name: Build the kernel
+        working-directory: unixnu
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          UNIXNU_IPSW: ${{ inputs.ipsw_url }}
+        run: ./unixnu build kernel
+
+      - name: Upload the kernel and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vermeer-kernel-${{ github.run_id }}
+          path: |
+            unixnu/out/vermeer/kernel/**
+            unixnu/out/vermeer/logs/**
+            unixnu/out/vermeer/.config
+            unixnu/out/vermeer/tree/build/xnu/ios-sym/**
+          include-hidden-files: true
+          if-no-files-found: warn
+          retention-days: 7
